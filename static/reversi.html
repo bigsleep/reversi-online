@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <title>Reversi</title>
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="/default.css">
+    <script src="//code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/vue/0.11.4/vue.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <div id="view" class="board">
+            <table>
+                <tr>
+                    <th></th><th v-repeat="boardSize">{{$index + 1}}</th>
+                </tr>
+                <tr v-repeat="row : board.cells">
+                    <th>{{$index + 1}}</th>
+                    <td v-repeat="row" v-on="click: gameStep($index, $parent.$index)" class="cell">
+                        <span class="disc {{cellStyle($value)}}"></span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+
+<script type="text/javascript">
+    function getBoardSize() {
+        return 8;
+    }
+
+    function player() {
+        return {
+            BLACK: 1,
+            WHITE: 2
+        };
+    }
+
+    function cellStatus() {
+        return {
+            EMPTY: 0,
+            BLACK: 1,
+            WHITE: 2,
+            BLACK_POSSIBLE: 3,
+            WHITE_POSSIBLE: 4
+        };
+    }
+
+    function gameStatus() {
+        return {
+            BLACK_TURN: 1,
+            WHITE_TURN: 2,
+            BLACK_WIN: 3,
+            WHITE_WIN: 4,
+            EVEN: 5
+        };
+    }
+
+    function cellStyle(c) {
+        switch (c) {
+            case cellStatus().BLACK:
+                return "black";
+            case cellStatus().BLACK_POSSIBLE:
+                return "possible black";
+            case cellStatus().WHITE:
+                return "white";
+            case cellStatus().WHITE_POSSIBLE:
+                return "possible white";
+            default:
+                return "empty";
+        }
+    }
+
+    function opponentPlayer(p) {
+        return (p === player().BLACK) ? player().WHITE : player().BLACK;
+    }
+
+    function initializeBoard(size) {
+        var half = Math.floor(size / 2);
+        var b = [];
+        for (var y = 0; y < size; y++) {
+            var row = [];
+            for (var x = 0; x < size; x++) {
+                row.push(cellStatus().EMPTY);
+            }
+            b.push(row);
+        }
+        b[half][half - 1] = cellStatus().BLACK;
+        b[half - 1][half] = cellStatus().BLACK;
+        b[half - 1][half - 1] = cellStatus().WHITE;
+        b[half][half] = cellStatus().WHITE;
+
+        fillPossibleMoves(b, player().BLACK);
+        return b;
+    }
+
+    function listFlips(b, p, x, y) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        var c = (p === player().BLACK) ? cellStatus().BLACK : cellStatus().WHITE;
+        var flips = [];
+
+        if (x < 0 || maxX < x || y < 0 || maxY < y) return [];
+        if (b[y][x] !== cellStatus().EMPTY) return [];
+
+        for (var dx = -1; dx <= 1; ++dx) {
+            for (var dy = -1; dy <= 1; ++dy) {
+                if (dx !== 0 || dy !== 0) {
+                    var px = x + dx;
+                    var py = y + dy;
+                    var ps = [];
+
+                    while (true) {
+                        if (px < 0 || maxX < px || py < 0 || maxY < py) {
+                            ps = [];
+                            break;
+                        }
+
+                        var cell = b[py][px];
+                        if (cell === cellStatus().EMPTY) {
+                            ps = [];
+                            break;
+                        }
+
+                        if (cell === c) {
+                            break;
+                        }
+
+                        ps.push([px, py]);
+                        px += dx;
+                        py += dy;
+                    }
+
+                    flips = flips.concat(ps);
+                }
+            }
+        }
+
+        return flips;
+    }
+
+    function flipDiscs(b, p, x, y) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        for (var px = 0; px <= maxX; ++px) {
+            for (var py = 0; py <= maxY; ++py) {
+                var q = b[py][px];
+                if (q === cellStatus().BLACK_POSSIBLE || q === cellStatus().WHITE_POSSIBLE) {
+                    b[py][px] = cellStatus().EMPTY;
+                }
+            }
+        }
+
+        var fs = listFlips(b, p, x, y);
+        var c = (p === player().BLACK) ? cellStatus().BLACK : cellStatus().WHITE;
+        for (var i = 0, sz = fs.length; i < sz; ++i) {
+            b[fs[i][1]][fs[i][0]] = c;
+        }
+        b[y][x] = c;
+    }
+
+    function fillPossibleMoves(b, p) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        var c = (p === player().BLACK) ? cellStatus().BLACK_POSSIBLE : cellStatus().WHITE_POSSIBLE;
+
+        for (var x = 0; x <= maxX; ++x) {
+            for (var y = 0; y <= maxY; ++y) {
+                var q = b[y][x];
+                if (q === cellStatus().BLACK_POSSIBLE || q === cellStatus().WHITE_POSSIBLE) {
+                    b[y][x] = cellStatus().EMPTY;
+                }
+            }
+        }
+
+        var ms = [];
+        for (var x = 0; x <= maxX; ++x) {
+            for (var y = 0; y <= maxY; ++y) {
+                var fs = listFlips(b, p, x, y);
+                if (fs.length > 0) {
+                    ms.push([x, y]);
+                }
+            }
+        }
+
+        for (var i = 0, size = ms.length; i < size; ++i) {
+            b[ms[i][1]][ms[i][0]] = c;
+        }
+
+        return ms.length;
+    }
+
+    function gameStep(x, y) {
+        console.log("gameStep");
+        var b = vm.$data.board.cells;
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        var c = 0;
+        var p = 0;
+        var moveCount = 0;
+
+        if (x < 0 || maxX < x || y < 0 || maxY < y) return;
+        c = b[y][x];
+
+        if (c === cellStatus().BLACK_POSSIBLE) {
+            p = player().BLACK;
+        } else if (c === cellStatus().WHITE_POSSIBLE) {
+            p = player().WHITE;
+        } else {
+            return;
+        }
+
+        flipDiscs(b, p, x, y);
+
+        for (var i = 0; i < 2; ++i) {
+            p = opponentPlayer(p);
+            moveCount = fillPossibleMoves(b, p);
+            if (moveCount > 0) break;
+        }
+
+        vm.$data = vm.$data;
+    }
+
+    var vm = new Vue({
+        el: "#view",
+        data: {
+            boardSize: getBoardSize(),
+            board: { cells: initializeBoard(getBoardSize()) },
+            currentStatus: gameStatus().BLACK_TURN
+        },
+        methods: {
+            gameStep: gameStep,
+            gameStatus: gameStatus,
+            cellStatus: cellStatus,
+            cellStyle: cellStyle
+        }
+    });
+</script>

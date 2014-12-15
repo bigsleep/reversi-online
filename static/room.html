@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <title>Reversi</title>
+    <link rel="stylesheet" href="/default.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <script src="//code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/vue/0.11.4/vue.min.js"></script>
+</head>
+
+<div id="view">
+    <nav class="navbar navbar-default navbar-static-top">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="/index.html">Reversi</a>
+            </div>
+            <ul class="nav navbar-nav navbar-right">
+                <li><a v-if="!you" href="/login.html" class="navbar-link">Login</a></li>
+                <li><p v-if="you" class="navbar-text"><span class="glyphicon glyphicon-user"></span> {{you.userName}} (#{{you.userId}})</p></li>
+            </ul>
+        </div>
+    </nav>
+
+    <body>
+        <div class="container">
+            <div class="row">
+                <div v-repeat="entry : users" class="col-xs-6">
+                    <div class="panel panel-default">
+                        <div class="panel-body">
+                            <div class="form-inline">
+                                <div v-if="entry.player === playerType().BLACK" class="form-group">
+                                    <span class="fa fa-circle fa-2x"></span>
+                                </div>
+                                <div v-if="entry.player === playerType().WHITE" class="form-group">
+                                    <span class="fa fa-circle-thin fa-2x"></span>
+                                </div>
+                                <div class="form-group">
+                                    <span>{{entry.entryUser.userName}} (#{{entry.entryUser.userId}})</span>
+                                </div>
+                                <div v-if="entry.entryReady" class="form-group">
+                                    <div class="badge alert-success">
+                                        <span class="glyphicon glyphicon-ok" aria-hidden="true"></span> ready
+                                    </div>
+                                </div>
+                                <div v-if="showControl(started, entry)" class="form-group">
+                                    <button v-if="showReadyButton(started, entry)" class="btn btn-default btn-xs" v-on="click : ready()">ready</button>
+                                    <button v-if="showLeaveButton(started, entry)" class="btn btn-default btn-xs" v-on="click : leave()">leave</button>
+                                    <button v-if="showModeAiButton(started, entry)" class="btn btn-default btn-xs" v-on="click : modeAi()">ai</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="board">
+                <table>
+                    <tr>
+                        <th></th><th v-repeat="gameState.board.length">{{$index + 1}}</th>
+                    </tr>
+                    <tr v-repeat="row : gameState.board">
+                        <th>{{$index + 1}}</th>
+                        <td v-repeat="row" v-on="click: move($value, $index, $parent.$index)" class="cell">
+                            <span class="disc {{cellStyle($value)}}"></span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <div v-if="result" class="text-center">{{result}}</div>
+        </div>
+    </body>
+</view>
+
+<script type="text/javascript">
+(function () {
+    "use strict";
+
+    var vm = null;
+    var wsc = null;
+    
+    function createWebSocketClient (url) {
+        var ws = null;
+        var isRunning = false;
+        var errorCount = 0;
+        var errorLimit = 5;
+        var sendQueue = [];
+
+        var wsc = {
+            interval: 500,
+            onopen: function () {
+                console.log("onOpen");
+            },
+            onerror: function (error) {
+                console.log("onError", error);
+            },
+            onmessage: function (message) {
+            },
+            onclose: function () {
+                console.log("onClose");
+            },
+            onfatal: function () {
+                console.log("fatal error");
+                isRunning = false;
+            },
+            send: function (message) {
+                var m = null;
+                sendQueue.push(message);
+                if (ws) {
+                    while (sendQueue.length > 0 && ws.readyState) {
+                        m = sendQueue.shift();
+                        ws.send(m);
+                    }
+                }
+            },
+            routine: null,
+            start: function () {
+                initializeWS();
+                if (wsc.routine) {
+                    isRunning = true;
+                    setInterval(routine, wsc.interval);
+                }
+            },
+            stop: function () {
+                isRunning = false;
+            },
+            close: function (code, str) {
+                if (ws) {
+                    ws.close(code, str);
+                }
+            }
+        };
+
+        function initializeWS () {
+            if (errorCount > errorLimit) {
+                wsc.onfatal();
+                return;
+            }
+
+            try {
+                ws = new WebSocket(url);
+                ws.onopen = wsc.onopen;
+                ws.onerror = function (error) {
+                    wsc.onerror(error);
+                    errorCount++;
+                };
+                ws.onmessage = wsc.onmessage;
+                ws.onclose = wsc.onclose;
+            } catch (e) {
+                console.log("exception", e);
+            }
+        }
+
+        function routine () {
+            if (isRunning && wsc.routine) {
+                if (ws === null || ws.readyState > 1) {
+                    initializeWS();
+                } else if (ws.readyState === 1) {
+                    wsc.routine();
+                }
+            }
+        }
+
+        return wsc;
+    }
+
+    function getBoardSize() {
+        return 8;
+    }
+
+    function player() {
+        return {
+            BLACK: 1,
+            WHITE: 2
+        };
+    }
+
+    function cellStatus() {
+        return {
+            EMPTY: 0,
+            BLACK: 1,
+            WHITE: 2,
+            BLACK_POSSIBLE: 3,
+            WHITE_POSSIBLE: 4
+        };
+    }
+
+    function opponentPlayer(p) {
+        return (p === player().BLACK) ? player().WHITE : player().BLACK;
+    }
+
+    function listFlips(b, p, x, y) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        var c = (p === player().BLACK) ? cellStatus().BLACK : cellStatus().WHITE;
+        var flips = [];
+
+        if (x < 0 || maxX < x || y < 0 || maxY < y) return [];
+        if (b[y][x] !== cellStatus().EMPTY) return [];
+
+        for (var dx = -1; dx <= 1; ++dx) {
+            for (var dy = -1; dy <= 1; ++dy) {
+                if (dx !== 0 || dy !== 0) {
+                    var px = x + dx;
+                    var py = y + dy;
+                    var ps = [];
+
+                    while (true) {
+                        if (px < 0 || maxX < px || py < 0 || maxY < py) {
+                            ps = [];
+                            break;
+                        }
+
+                        var cell = b[py][px];
+                        if (cell === cellStatus().EMPTY) {
+                            ps = [];
+                            break;
+                        }
+
+                        if (cell === c) {
+                            break;
+                        }
+
+                        ps.push([px, py]);
+                        px += dx;
+                        py += dy;
+                    }
+
+                    flips = flips.concat(ps);
+                }
+            }
+        }
+
+        return flips;
+    }
+
+    function flipDiscs(b, p, x, y) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        for (var px = 0; px <= maxX; ++px) {
+            for (var py = 0; py <= maxY; ++py) {
+                var q = b[py][px];
+                if (q === cellStatus().BLACK_POSSIBLE || q === cellStatus().WHITE_POSSIBLE) {
+                    b[py][px] = cellStatus().EMPTY;
+                }
+            }
+        }
+
+        var fs = listFlips(b, p, x, y);
+        var c = (p === player().BLACK) ? cellStatus().BLACK : cellStatus().WHITE;
+        for (var i = 0, sz = fs.length; i < sz; ++i) {
+            b[fs[i][1]][fs[i][0]] = c;
+        }
+        b[y][x] = c;
+    }
+
+    function fillPossibleMoves(b, p) {
+        var maxX = b[0].length - 1;
+        var maxY = b.length - 1;
+        var c = (p === player().BLACK) ? cellStatus().BLACK_POSSIBLE : cellStatus().WHITE_POSSIBLE;
+
+        for (var x = 0; x <= maxX; ++x) {
+            for (var y = 0; y <= maxY; ++y) {
+                var q = b[y][x];
+                if (q === cellStatus().BLACK_POSSIBLE || q === cellStatus().WHITE_POSSIBLE) {
+                    b[y][x] = cellStatus().EMPTY;
+                }
+            }
+        }
+
+        var ms = [];
+        for (var x = 0; x <= maxX; ++x) {
+            for (var y = 0; y <= maxY; ++y) {
+                var fs = listFlips(b, p, x, y);
+                if (fs.length > 0) {
+                    ms.push([x, y]);
+                }
+            }
+        }
+
+        for (var i = 0, size = ms.length; i < size; ++i) {
+            b[ms[i][1]][ms[i][0]] = c;
+        }
+
+        return ms.length;
+    }
+
+    vm = new Vue({
+        el: "#view",
+        data: {
+            boardSize: getBoardSize(),
+            you: null,
+            player: 0,
+            users: [],
+            started: false,
+            gameState: null,
+            result: null
+        },
+        methods: {
+            ready: function () {
+                console.log("ready");
+                wsc.send(JSON.stringify({Ready:[]}));
+            },
+            leave: function () {
+                console.log("leave");
+                wsc.send(JSON.stringify({Leave:[]}));
+            },
+            modeAi: function () {
+                console.log("modeAi");
+                wsc.send(JSON.stringify({ChangeMode:"ModeAi"}));
+            },
+            move: function (s, x, y) {
+                if (s === cellStatus().BLACK_POSSIBLE || s === cellStatus().WHITE_POSSIBLE) {
+                    console.log("move" + x + "," + y);
+                    wsc.send(JSON.stringify({Move:[x, y]}));
+                }
+            },
+            showControl: function (started, entry) {
+                return entry.you || false;
+            },
+            showReadyButton: function (started, entry) {
+                return entry.you && !entry.entryReady && !started;
+            },
+            showLeaveButton: function (started, entry) {
+                return (entry.you || false) && !started;
+            },
+            showModeAiButton: function (started, entry) {
+                return entry.you && entry.entryMode !== "ModeAi" && !started;
+            },
+            cellStyle: function (c) {
+                switch (c) {
+                    case cellStatus().BLACK:
+                        return "black";
+                    case cellStatus().BLACK_POSSIBLE:
+                        return "possible black";
+                    case cellStatus().WHITE:
+                        return "white";
+                    case cellStatus().WHITE_POSSIBLE:
+                        return "possible white";
+                    default:
+                        return "empty";
+                }
+            },
+            playerType: player
+        }
+    });
+
+    wsc = createWebSocketClient("ws://localhost:3000/game");
+    wsc.onmessage = function (m) {
+        console.log("onMessage", m);
+        var res = $.parseJSON(m.data);
+        var p = 0;
+        var uid = null;
+        var users = [];
+        var s = null;
+        var joined = false;
+        if (res.responseYou) {
+            uid = res.responseYou.userId;
+            vm.$data.you = res.responseYou;
+        } else {
+            wsc.stop();
+            wsc.close(1000, "not joined");
+            location.href = "/index.html";
+        }
+
+        if (res.responsePlayer) {
+            if (res.responsePlayer === "Black") {
+                p = 1;
+            } else if (res.responsePlayer === "White") {
+                p = 2;
+            } else {
+                p = 0;
+            }
+            vm.$data.started = true;
+            vm.$data.player = p;
+        }
+
+        if (res.responseUsers) {
+            users =  res.responseUsers.reverse();
+            for (var i = 0; i < users.length; ++i) {
+                if (users[i].entryUser.userId === uid) {
+                    joined = true;
+                    if (p !== 0) {
+                        users[i].player = p;
+                    }
+                    users[i].you = true;
+                } else {
+                    if (p !== 0) {
+                        users[i].player = opponentPlayer(p);
+                    }
+                    users[i].you = false;
+                }
+            }
+            vm.$data.users = users;
+            if (!joined) {
+                wsc.stop();
+                wsc.close(1000, "not joined");
+                location.href = "/index.html";
+            }
+        }
+
+        if (res.responseState) {
+            s = res.responseState;
+            if (p === player().BLACK && s.status === "BlackTurn") {
+                fillPossibleMoves(s.board, player().BLACK);
+            }
+
+            if (p === player().WHITE && s.status === "WhiteTurn") {
+                fillPossibleMoves(s.board, player().WHITE);
+            }
+
+            vm.$data.gameState = s;
+        }
+
+        if (res.responseResult) {
+            if (res.responseResult === "BlackWin") vm.$data.result = "Black Win";
+            else if (res.responseResult === "WhiteWin") vm.$data.result = "White Win";
+            else vm.$data.result = "Even";
+            wsc.stop();
+            wsc.close(1000, "ended");
+            setTimeout(function () {
+                location.href = "/index.html";
+            }, 5000);
+        }
+    };
+
+    wsc.routine = function () {
+        var mcount = 0;
+        if (vm.$data.gameState !== null) {
+            mcount = vm.$data.gameState.moves.length;
+        }
+        wsc.send(JSON.stringify({Sync: mcount}));
+    };
+
+    wsc.onfatal = function () {
+        wsc.stop();
+        location.href = "index.html";
+    };
+
+    wsc.start();
+} ());
+</script>

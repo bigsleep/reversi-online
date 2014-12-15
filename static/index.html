@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <title>Reversi</title>
+    <link rel="stylesheet" href="/default.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+    <script src="//code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/vue/0.11.4/vue.min.js"></script>
+</head>
+
+<div id="view">
+    <nav class="navbar navbar-default navbar-static-top">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">Reversi</a>
+            </div>
+            <ul class="nav navbar-nav navbar-right">
+                <li><a v-if="!you" href="/login.html" class="navbar-link">Login</a></li>
+                <li><p v-if="you" class="navbar-text"><span class="glyphicon glyphicon-user"></span> {{you.userName}} (#{{you.userId}})</p></li>
+            </ul>
+        </div>
+    </nav>
+
+    <body>
+        <div class="container">
+            <label>rooms</label>
+            <table class="table">
+                <tr v-repeat="room : rooms">
+                    <td>
+                        <ul class="list-inline">
+                            <li v-repeat="userInfo : room.matchRoomUsers">
+                                {{userInfo.entryUser.userName}}
+                            </li>
+                        </ul>
+                    </td>
+                    <td>
+                        <button class="btn btn-default" v-on="click : enterRoom($index)" disabled="{{canEnter(rooms, $index, you) ? false : true}}">enter</button>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <hr>
+        <footer>
+            <p>aaa</p>
+        </footer>
+    </body>
+</div>
+
+<script type="text/javascript">
+(function () {
+    function updateRooms () {
+        $.getJSON("/rooms", function (a) {
+            var rs = a.output.rooms;
+            if (a.output.you !== null) {
+                a.output.you.joined = false;
+                var uid = a.output.you.userId;
+                var rcount = rs.length;
+                for (var i = 0; i < rcount; ++i) {
+                    rs[i].joined = false;
+                    for (var j = 0; j < rs[i].matchRoomUsers.length; ++j) {
+                        if (rs[i].matchRoomUsers[j].entryUser.userId === uid) {
+                            rs[i].joined = true;
+                            a.output.you.joined = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            vm.$data.rooms = rs;
+            console.log(rs);
+            vm.$data.you = a.output.you;
+        });
+    }
+
+    var vm = new Vue({
+        el: "#view",
+        data: {
+            you: null,
+            rooms: []
+        },
+        methods: {
+            flip: function (disc) {
+                disc.$value = "empty";
+            },
+            enterRoom: function (roomId) {
+                $.ajax({
+                    type: "POST",
+                    url: "/enter",
+                    dataType: "json",
+                    contentType: "applicaton/json",
+                    data: JSON.stringify({"input": roomId}),
+                    success: function (res) {
+                        console.log(res);
+                        if (res.output === "success") {
+                            location.href = "/room.html";
+                        }
+                    }
+                });
+            },
+            canEnter: function (rooms, roomId, user) {
+                if (user.joined && rooms[roomId].joined) {
+                    return true;
+                }
+                if (user === null || user.joined || !rooms[roomId].matchRoomActive) {
+                    return false;
+                }
+                return true;
+            }
+        }
+    });
+
+    $(function () {
+        updateRooms();
+    });
+    setInterval(updateRooms, 5000);
+} ());
+</script>

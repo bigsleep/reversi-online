@@ -4,8 +4,9 @@ import Match
 import Control.Monad (forM_)
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TVar (readTVar)
 
-import qualified Data.Array.MArray as MArray (getElems)
+import qualified Data.Array.IArray as A (elems)
 
 import Test.Hspec (Spec, hspec, describe, it, shouldBe)
 import qualified Test.Hspec.QuickCheck as Q
@@ -31,10 +32,10 @@ tryMatchSpec = describe "tryMatch" $ do
 
         threadDelay 100000
 
-        rs <- atomically $ MArray.getElems rooms
+        rs <- mapM (atomically . readTVar) $ A.elems rooms
 
         print rs
 
         forM_ rs $ \(MatchRoom s us) -> do
-            s `shouldBe` Matching
+            s `shouldBe` True
             length us `shouldBe` maxEntry

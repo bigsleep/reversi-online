@@ -1,0 +1,54 @@
+.board > table
+{
+  margin: 0 auto;
+}
+
+.board > table th
+{
+  margin: 0;
+  padding: 0.125em 0.25em;
+  line-height: 100%;
+  text-align: center;
+}
+
+.board > table .cell
+{
+  background: #090;
+  border: 1px solid #ccc;
+  padding: 0;
+  margin: 0;
+  line-height: 0;
+}
+
+.board > table .cell > .disc
+{
+  display: inline-block;
+  width: 2em;
+  height: 2em;
+  border-radius: 1em;
+  margin: 0.25em;
+}
+
+.board > table .cell > .disc.possible
+{
+  width: 1em;
+  height: 1em;
+  border-radius: 0.5em;
+  margin: 0.75em;
+  opacity: 0.2;
+}
+
+.board > table .cell > .disc.white
+{
+  background: #FFF;
+}
+
+.board > table .cell > .disc.black
+{
+  background: #000;
+}
+
+.panel
+{
+  min-height: 4em;
+}
