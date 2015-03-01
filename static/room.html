@@ -16,7 +16,6 @@
                 <a class="navbar-brand" href="/index.html">Reversi</a>
             </div>
             <ul class="nav navbar-nav navbar-right">
-                <li><a v-if="!you" href="/login.html" class="navbar-link">Login</a></li>
                 <li><p v-if="you" class="navbar-text"><span class="glyphicon glyphicon-user"></span> {{you.userName}} (#{{you.userId}})</p></li>
             </ul>
         </div>

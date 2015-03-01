@@ -59,7 +59,8 @@ main = do
             print (Wai.requestHeaders request)
             apiRoutes staticFileApp routes request cont
         routes =
-            [ getApi runWai' "/rooms" $ roomsApp rs
+            [ getWai "/" $ staticFileApp' "index.html"
+            , getApi runWai' "/rooms" $ roomsApp rs
             , postApi runWai' "/login" $ loginApp counter
             , postApi runWai' "/enter" $ enterApp rs
             , getWai "/game" $ \req -> WaiWS.websocketsOr WS.defaultConnectionOptions (gameApp req) notFoundApp $ req
